@@ -1,4 +1,3 @@
-
 // Interview service for connecting with Google Gemini API
 
 import { toast } from "sonner";
@@ -61,15 +60,22 @@ const callGeminiAPI = async (
       });
     }
 
-    console.log("Sending request to Gemini API:", { prompt });
+    console.log("Sending request to Gemini API:", { prompt: prompt.substring(0, 100) + "..." });
+    
+    // Add timeout to fetch request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
     
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorData = await response.json();
@@ -78,16 +84,25 @@ const callGeminiAPI = async (
     }
 
     const data = await response.json();
-    const generatedContent = data.candidates[0]?.content?.parts[0]?.text;
+    console.log("Gemini API response received:", data);
+    
+    const generatedContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!generatedContent) {
+      console.error("No content in Gemini response:", data);
       throw new Error("No content generated from Gemini API");
     }
 
     return generatedContent;
   } catch (error) {
-    console.error("Error calling Gemini API:", error);
-    toast.error("Error connecting to Gemini AI. Using fallback questions instead.");
+    // Check for specific error types and provide more helpful messages
+    if (error instanceof DOMException && error.name === "AbortError") {
+      console.error("Gemini API request timed out after 15 seconds");
+      toast.error("Gemini API request timed out. Using fallback questions instead.");
+    } else {
+      console.error("Error calling Gemini API:", error);
+      toast.error("Error connecting to Gemini AI. Using fallback questions instead.");
+    }
     throw error;
   }
 };
@@ -122,24 +137,45 @@ export const generateQuestions = async (
     
     Don't include any explanations or additional text outside the JSON array.`;
 
-    const responseText = await callGeminiAPI(prompt, systemInstruction);
+    // Make up to 3 attempts to get a valid response from Gemini
+    let attempts = 0;
+    const maxAttempts = 3;
+    let lastError = null;
     
-    try {
-      // Find JSON in the response - looking for array between square brackets
-      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const jsonString = jsonMatch[0];
-        const questions = JSON.parse(jsonString);
-        return questions;
-      } else {
-        throw new Error("Could not extract JSON from Gemini response");
+    while (attempts < maxAttempts) {
+      try {
+        console.log(`Gemini API attempt ${attempts + 1} of ${maxAttempts}`);
+        const responseText = await callGeminiAPI(prompt, systemInstruction);
+        
+        // Find JSON in the response - looking for array between square brackets
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const jsonString = jsonMatch[0];
+          const questions = JSON.parse(jsonString);
+          console.log(`Successfully generated ${questions.length} questions`);
+          return questions;
+        } else {
+          console.error("Could not extract JSON from Gemini response:", responseText.substring(0, 200) + "...");
+          throw new Error("Could not extract JSON from Gemini response");
+        }
+      } catch (error) {
+        lastError = error;
+        attempts++;
+        console.warn(`Attempt ${attempts} failed:`, error);
+        
+        // Small delay between retries
+        if (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
-    } catch (jsonError) {
-      console.error("Error parsing Gemini response:", jsonError);
-      throw jsonError;
     }
+    
+    console.error(`All ${maxAttempts} attempts to Gemini API failed`, lastError);
+    throw lastError || new Error("Failed after multiple attempts");
+    
   } catch (error) {
     console.warn("Using fallback questions due to error:", error);
+    toast.info("Using pre-defined interview questions");
     
     // Fallback to predefined questions with improved structure
     let questions: InterviewQuestion[] = [
@@ -308,7 +344,7 @@ export const getAIFeedback = async (
   response: string,
   profile: UserProfile
 ): Promise<Feedback> => {
-  console.log("Getting feedback for response:", { question, response });
+  console.log("Getting feedback for response:", { question, response: response.substring(0, 50) + "..." });
   
   try {
     // First try to use Gemini for feedback
@@ -330,24 +366,41 @@ export const getAIFeedback = async (
     
     Be constructive but honest in your feedback. Don't include any explanations or additional text outside the JSON object.`;
 
-    const responseText = await callGeminiAPI(prompt, systemInstruction);
+    // Make up to 2 attempts to get a valid response for feedback
+    let attempts = 0;
+    const maxAttempts = 2;
+    let lastError = null;
     
-    try {
-      // Find JSON in the response - looking for object between curly braces
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const jsonString = jsonMatch[0];
-        const feedback = JSON.parse(jsonString);
-        return feedback;
-      } else {
-        throw new Error("Could not extract JSON from Gemini response");
+    while (attempts < maxAttempts) {
+      try {
+        console.log(`Gemini API feedback attempt ${attempts + 1} of ${maxAttempts}`);
+        const responseText = await callGeminiAPI(prompt, systemInstruction);
+        
+        // Find JSON in the response - looking for object between curly braces
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const jsonString = jsonMatch[0];
+          const feedback = JSON.parse(jsonString);
+          return feedback;
+        } else {
+          throw new Error("Could not extract JSON from Gemini response");
+        }
+      } catch (error) {
+        lastError = error;
+        attempts++;
+        
+        // Small delay between retries
+        if (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
-    } catch (jsonError) {
-      console.error("Error parsing Gemini feedback response:", jsonError);
-      throw jsonError;
     }
+    
+    throw lastError || new Error("Failed to get feedback after multiple attempts");
+    
   } catch (error) {
     console.warn("Using fallback feedback due to error:", error);
+    toast.info("Using AI feedback unavailable. Using fallback evaluation.");
     
     // Simple mock analysis as fallback
     const wordCount = response.split(' ').length;
@@ -379,7 +432,7 @@ export const getAIFeedback = async (
   }
 };
 
-// Speech recognition functionality (placeholder for now)
+// Speech recognition functionality
 export const startSpeechRecognition = () => {
   // Check if browser supports speech recognition
   if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
