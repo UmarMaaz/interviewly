@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -23,6 +22,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   const [isFeedbackMode, setIsFeedbackMode] = useState(false);
   const [interviewComplete, setInterviewComplete] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [currentSpeechText, setCurrentSpeechText] = useState<string>('');
   
   // Generate initial questions
   useEffect(() => {
@@ -32,6 +32,12 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         const initialQuestions = await generateQuestions(userProfile);
         setQuestions(initialQuestions);
         setIsGeneratingQuestions(false);
+        
+        // Set initial greeting text for the avatar to speak
+        if (initialQuestions.length > 0) {
+          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach. Let's begin with the first question: ${initialQuestions[0].question}`;
+          setCurrentSpeechText(greeting);
+        }
       } catch (error) {
         console.error("Error generating questions:", error);
         toast.error("Failed to generate interview questions. Please try again.");
@@ -41,6 +47,29 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     
     initInterview();
   }, [userProfile]);
+
+  // When the current question changes, update the speech text
+  useEffect(() => {
+    if (!isGeneratingQuestions && questions.length > 0 && !isFeedbackMode && !interviewComplete) {
+      const currentQuestion = questions[currentQuestionIndex];
+      setCurrentSpeechText(currentQuestion.question);
+    }
+  }, [currentQuestionIndex, questions, isGeneratingQuestions, isFeedbackMode, interviewComplete]);
+
+  // When feedback is received, make the avatar speak the feedback
+  useEffect(() => {
+    if (isFeedbackMode && feedback) {
+      const feedbackText = `${feedback.positive ? 'Good job!' : 'Let\'s improve that answer.'} ${feedback.contentFeedback} ${feedback.deliveryFeedback} ${feedback.improvementTips || ''}`;
+      setCurrentSpeechText(feedbackText);
+    }
+  }, [isFeedbackMode, feedback]);
+
+  // When interview completes, have avatar say goodbye
+  useEffect(() => {
+    if (interviewComplete) {
+      setCurrentSpeechText(`Congratulations ${userProfile.name}! You've completed your mock interview for the ${userProfile.role} position. I hope this practice session was helpful.`);
+    }
+  }, [interviewComplete, userProfile]);
 
   const handleSubmitResponse = async () => {
     if (!userResponse.trim()) {
@@ -156,8 +185,9 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       <div className="lg:col-span-2 flex flex-col justify-center items-center">
         <Card className="w-full aspect-square relative flex items-center justify-center shadow-lg">
           <Avatar 
-            isSpeaking={!isFeedbackMode && !isGeneratingQuestions} 
+            isSpeaking={!isFeedbackMode && !isGeneratingQuestions || (isFeedbackMode && !!feedback)} 
             mood={isFeedbackMode ? (feedback?.positive ? 'positive' : 'neutral') : 'neutral'}
+            text={currentSpeechText}
           />
         </Card>
         

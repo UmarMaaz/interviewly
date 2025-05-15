@@ -1,12 +1,14 @@
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Suspense } from 'react';
+import * as tts from '@/utils/textToSpeech';
 
 interface AvatarProps {
   isSpeaking: boolean;
   mood: 'neutral' | 'positive' | 'negative';
+  text?: string; // The text to speak
 }
 
 // A placeholder 3D model that uses primitives
@@ -61,14 +63,35 @@ const AvatarModel = ({ isSpeaking, mood }: { isSpeaking: boolean; mood: string }
   );
 };
 
-const Avatar: React.FC<AvatarProps> = ({ isSpeaking, mood }) => {
+const Avatar: React.FC<AvatarProps> = ({ isSpeaking, mood, text }) => {
+  // Use a ref to track changes to isSpeaking and text props
+  const lastTextRef = useRef<string | undefined>();
+  
+  useEffect(() => {
+    // If we have a new text to speak and the avatar is instructed to speak
+    if (text && text !== lastTextRef.current && isSpeaking) {
+      tts.speak(text);
+      lastTextRef.current = text;
+    }
+    
+    // If the avatar should stop speaking
+    if (!isSpeaking) {
+      tts.stop();
+    }
+    
+    return () => {
+      // Clean up on unmount
+      tts.stop();
+    };
+  }, [isSpeaking, text]);
+  
   return (
     <div className="w-full h-full">
       <Canvas camera={{ position: [0, 0, 3.5], fov: 50 }}>
         <ambientLight intensity={0.5} />
         <pointLight position={[10, 10, 10]} intensity={1} />
         <Suspense fallback={null}>
-          <AvatarModel isSpeaking={isSpeaking} mood={mood} />
+          <AvatarModel isSpeaking={isSpeaking && tts.isSpeaking()} mood={mood} />
         </Suspense>
         <OrbitControls 
           enableZoom={false}
