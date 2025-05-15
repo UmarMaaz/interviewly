@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import Avatar from '@/components/Avatar';
 import QuestionPanel from '@/components/QuestionPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
-import { UserProfile, generateQuestions, getAIFeedback, InterviewQuestion, Feedback } from '@/utils/interviewService';
+import { UserProfile, generateQuestions, getAIFeedback, InterviewQuestion, Feedback, startSpeechRecognition } from '@/utils/interviewService';
 
 interface InterviewRoomProps {
   userProfile: UserProfile;
@@ -22,6 +22,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(true);
   const [isFeedbackMode, setIsFeedbackMode] = useState(false);
   const [interviewComplete, setInterviewComplete] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   
   // Generate initial questions
   useEffect(() => {
@@ -84,9 +85,67 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     window.location.reload();
   };
 
-  // Placeholder for real microphone functionality
   const handleToggleMicrophone = () => {
-    toast.info("Voice input feature coming soon!");
+    if (isListening) {
+      stopListening();
+      return;
+    }
+
+    // Check for browser compatibility
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      toast.error("Speech recognition is not supported in your browser.");
+      return;
+    }
+
+    try {
+      // @ts-ignore - TypeScript doesn't know about webkitSpeechRecognition
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      
+      recognition.onstart = () => {
+        setIsListening(true);
+        toast.info("Listening...");
+      };
+      
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0])
+          .map((result: any) => result.transcript)
+          .join('');
+        
+        setUserResponse(transcript);
+      };
+      
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error', event.error);
+        toast.error(`Speech recognition error: ${event.error}`);
+        setIsListening(false);
+      };
+      
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+      
+      // Store recognition instance in window to be able to stop it later
+      (window as any).recognitionInstance = recognition;
+      
+      recognition.start();
+    } catch (error) {
+      console.error("Error starting speech recognition:", error);
+      toast.error("Could not start voice input. Please try again.");
+    }
+  };
+
+  const stopListening = () => {
+    if ((window as any).recognitionInstance) {
+      (window as any).recognitionInstance.stop();
+      toast.info("Voice input stopped");
+      setIsListening(false);
+    }
   };
 
   const currentQuestion = questions[currentQuestionIndex];
@@ -104,7 +163,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         
         <div className="mt-4 w-full text-center">
           <p className="text-interview-secondary text-sm">
-            Interview with AI Coach
+            Interview with AI Coach - {userProfile.field} - {userProfile.name}
           </p>
         </div>
       </div>
@@ -159,11 +218,22 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
               
               <div className="flex flex-wrap gap-3 justify-between">
                 <Button 
-                  variant="outline"
+                  variant={isListening ? "destructive" : "outline"}
                   onClick={handleToggleMicrophone}
                   type="button"
+                  className="flex items-center gap-2"
                 >
-                  Use Voice Input
+                  {isListening ? (
+                    <>
+                      <span className="relative flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                      </span>
+                      Stop Recording
+                    </>
+                  ) : (
+                    'Use Voice Input'
+                  )}
                 </Button>
                 
                 <Button 
