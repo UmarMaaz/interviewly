@@ -18,23 +18,54 @@ export const speak = (text: string): void => {
   // Create a new utterance
   const utterance = new SpeechSynthesisUtterance(text);
   
-  // Configure the voice
-  utterance.rate = 1.0;
-  utterance.pitch = 1.0;
+  // Configure the voice for more natural speech
+  utterance.rate = 0.9; // Slightly slower rate for more natural speech
+  utterance.pitch = 1.1; // Slightly higher pitch
   utterance.volume = 1.0;
   
-  // Try to use a natural sounding voice if available
-  const voices = synth.getVoices();
-  const preferredVoice = voices.find(
-    voice => voice.name.includes('Google') || voice.name.includes('Samantha') || voice.name.includes('Daniel')
-  );
+  // Get all available voices
+  let voices = synth.getVoices();
   
-  if (preferredVoice) {
-    utterance.voice = preferredVoice;
+  // If voices array is empty, try again after a small delay
+  // This is needed for some browsers that load voices asynchronously
+  if (voices.length === 0) {
+    setTimeout(() => {
+      voices = synth.getVoices();
+      setPreferredVoice(utterance, voices);
+    }, 100);
+  } else {
+    setPreferredVoice(utterance, voices);
   }
   
   // Start speaking
   synth.speak(utterance);
+};
+
+/**
+ * Helper function to set the preferred voice
+ */
+const setPreferredVoice = (utterance: SpeechSynthesisUtterance, voices: SpeechSynthesisVoice[]): void => {
+  // Try to find a more natural sounding voice
+  // Priority order: Google voices > Samantha > Daniel > Other natural voices
+  const preferredVoice = voices.find(
+    voice => 
+      voice.name.includes('Google UK English Female') || 
+      voice.name.includes('Google US English') ||
+      voice.name.includes('Samantha') || 
+      voice.name.includes('Daniel') ||
+      voice.name.includes('Karen') ||
+      voice.name.includes('Moira') ||
+      voice.name.includes('Alex')
+  );
+  
+  if (preferredVoice) {
+    utterance.voice = preferredVoice;
+    console.log('Using voice:', preferredVoice.name);
+  } else if (voices.length > 0) {
+    // If none of our preferred voices are available, just use the first voice
+    utterance.voice = voices[0];
+    console.log('Using default voice:', voices[0].name);
+  }
 };
 
 /**

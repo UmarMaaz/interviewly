@@ -1,3 +1,4 @@
+
 // Interview service for connecting with Google Gemini API
 
 import { toast } from "sonner";
@@ -99,21 +100,27 @@ export const generateQuestions = async (
   
   try {
     // First try to use Gemini
-    const systemInstruction = `You are an expert interview coach helping to generate relevant interview questions. Create questions that would be asked in a real job interview for the role specified.`;
+    const systemInstruction = `You are an expert interview coach helping to generate relevant interview questions. Create questions that would be asked in a real job interview for the role specified. Start with introductory questions and then progress to more specific role-related questions.`;
     
-    const prompt = `Generate 5-6 interview questions for a ${profile.role} position in the ${profile.field} field for someone at the ${profile.experienceLevel} experience level.
+    const prompt = `Generate 8-10 interview questions for a ${profile.role} position in the ${profile.field} field for someone at the ${profile.experienceLevel} experience level.
+    
+    Make sure to include these sections in this exact order:
+    1. Begin with 2-3 introductory questions (e.g., "Tell me about yourself", "Why are you interested in this role?", etc.)
+    2. Add 2-3 questions about the candidate's experience and skills
+    3. Include 2-3 technical or role-specific questions 
+    4. End with 1-2 behavioral or situational questions
     
     Format your response as a JSON array with the following structure:
     [
       {
         "id": 1,
         "question": "Your first question here",
-        "category": "Appropriate category (e.g., Technical Skills, Experience, Problem Solving)"
+        "category": "Appropriate category (e.g., Introduction, Technical Skills, Experience, Problem Solving)"
       },
       ...and so on
     ]
     
-    Include a mix of question types (technical, behavioral, experiential). Don't include any explanations or additional text outside the JSON array.`;
+    Don't include any explanations or additional text outside the JSON array.`;
 
     const responseText = await callGeminiAPI(prompt, systemInstruction);
     
@@ -134,91 +141,137 @@ export const generateQuestions = async (
   } catch (error) {
     console.warn("Using fallback questions due to error:", error);
     
-    // Fallback to predefined questions
-    let questions: InterviewQuestion[] = [];
+    // Fallback to predefined questions with improved structure
+    let questions: InterviewQuestion[] = [
+      {
+        id: 1,
+        question: `Hello ${profile.name}, please tell me a bit about yourself and your background.`,
+        category: "Introduction"
+      },
+      {
+        id: 2,
+        question: `Why are you interested in this ${profile.role} position?`,
+        category: "Introduction"
+      },
+      {
+        id: 3,
+        question: `What motivated you to pursue a career in the ${profile.field} field?`,
+        category: "Introduction"
+      }
+    ];
     
-    // Generate field-specific questions
+    // Add field-specific questions
     if (profile.field === "Software Engineering") {
-      questions = [
+      questions = [...questions,
         {
-          id: 1,
+          id: 4,
           question: `Based on your experience as a ${profile.role}, tell me about a challenging project you worked on and how you approached it.`,
           category: "Experience"
         },
         {
-          id: 2,
+          id: 5,
           question: "How do you stay updated with the latest technologies and tools in your field?",
           category: "Professional Development"
         },
         {
-          id: 3,
+          id: 6,
           question: "Explain how you would handle a situation where you disagreed with a team member's technical approach.",
           category: "Teamwork"
         },
         {
-          id: 4,
+          id: 7,
           question: "Describe your process for debugging a complex technical issue.",
           category: "Technical Skills"
         },
         {
-          id: 5,
+          id: 8,
+          question: "What programming languages or frameworks are you most comfortable with, and why?",
+          category: "Technical Skills"
+        },
+        {
+          id: 9,
           question: "Where do you see yourself professionally in the next 3-5 years?",
           category: "Career Goals"
+        },
+        {
+          id: 10,
+          question: "Tell me about a time when you had to meet a tight deadline. How did you manage your time and resources?",
+          category: "Problem Solving"
         }
       ];
     } else if (profile.field === "Marketing") {
-      questions = [
+      questions = [...questions,
         {
-          id: 1,
+          id: 4,
           question: `Describe a marketing campaign you worked on that was particularly successful as a ${profile.role}.`,
           category: "Experience"
         },
         {
-          id: 2,
+          id: 5,
           question: "How do you measure the success of your marketing initiatives?",
           category: "Analytics"
         },
         {
-          id: 3,
+          id: 6,
           question: "Tell me about a time when a marketing campaign didn't meet expectations. What did you learn?",
           category: "Problem Solving"
         },
         {
-          id: 4,
+          id: 7,
           question: "How do you stay current with changing marketing trends and technologies?",
           category: "Professional Development"
         },
         {
-          id: 5,
+          id: 8,
           question: "Describe your approach to understanding a target audience for a new product.",
           category: "Strategy"
+        },
+        {
+          id: 9,
+          question: "What marketing tools and platforms are you most experienced with?",
+          category: "Technical Skills"
+        },
+        {
+          id: 10,
+          question: "Tell me about how you've collaborated with other teams, such as sales or product development.",
+          category: "Teamwork"
         }
       ];
     } else {
       // Generic questions for any field
-      questions = [
+      questions = [...questions,
         {
-          id: 1,
-          question: `Tell me about your background and experience related to the ${profile.role} position.`,
+          id: 4,
+          question: `Tell me more specifically about your background and experience related to the ${profile.role} position.`,
           category: "Experience"
         },
         {
-          id: 2,
+          id: 5,
           question: "What are your greatest professional strengths and how do they help you in your work?",
           category: "Self-Assessment"
         },
         {
-          id: 3,
+          id: 6,
           question: "Describe a challenging situation at work and how you handled it.",
           category: "Problem Solving"
         },
         {
-          id: 4,
+          id: 7,
           question: "How do you prioritize your work when dealing with multiple deadlines?",
           category: "Time Management"
         },
         {
-          id: 5,
+          id: 8,
+          question: "What tools or methodologies are you familiar with that relate to this role?",
+          category: "Technical Skills"
+        },
+        {
+          id: 9,
+          question: "Describe a time when you had to adapt to a significant change at work.",
+          category: "Adaptability"
+        },
+        {
+          id: 10,
           question: "Why are you interested in this particular role and company?",
           category: "Motivation"
         }
@@ -228,14 +281,19 @@ export const generateQuestions = async (
     // Add experience level-specific question
     if (profile.experienceLevel.includes("Beginner")) {
       questions.push({
-        id: 6,
+        id: 11,
         question: "What skills are you hoping to develop in this role?",
         category: "Growth"
       });
     } else if (profile.experienceLevel.includes("Senior")) {
       questions.push({
-        id: 6,
+        id: 11,
         question: "How do you approach mentoring junior team members?",
+        category: "Leadership"
+      });
+      questions.push({
+        id: 12,
+        question: "Tell me about a time when you had to make a difficult decision as a leader.",
         category: "Leadership"
       });
     }
