@@ -1,7 +1,7 @@
 
-import React, { useRef } from 'react';
+import React from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, useGLTF } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import { Suspense } from 'react';
 
 interface AvatarProps {
@@ -29,33 +29,33 @@ const AvatarModel = ({ isSpeaking, mood }: { isSpeaking: boolean; mood: string }
       {/* Head */}
       <mesh position={[0, 0, 0]}>
         <sphereGeometry args={[1, 32, 32]} />
-        <meshStandardMaterial color={avatarColor} />
+        <meshStandardMaterial color={avatarColor as any} />
       </mesh>
       
       {/* Eyes */}
       <mesh position={[-0.3, 0.2, 0.8]}>
         <sphereGeometry args={[0.1, 16, 16]} />
-        <meshStandardMaterial color="white" />
+        <meshStandardMaterial color={'white' as any} />
       </mesh>
       <mesh position={[0.3, 0.2, 0.8]}>
         <sphereGeometry args={[0.1, 16, 16]} />
-        <meshStandardMaterial color="white" />
+        <meshStandardMaterial color={'white' as any} />
       </mesh>
       
       {/* Pupils */}
       <mesh position={[-0.3, 0.2, 0.9]}>
         <sphereGeometry args={[0.05, 16, 16]} />
-        <meshStandardMaterial color="black" />
+        <meshStandardMaterial color={'black' as any} />
       </mesh>
       <mesh position={[0.3, 0.2, 0.9]}>
         <sphereGeometry args={[0.05, 16, 16]} />
-        <meshStandardMaterial color="black" />
+        <meshStandardMaterial color={'black' as any} />
       </mesh>
       
       {/* Mouth (animated when speaking) */}
       <mesh position={[0, -0.3, 0.8]} scale={[0.5, speaking * 0.2, 0.1]}>
         <boxGeometry />
-        <meshStandardMaterial color="#421C52" />
+        <meshStandardMaterial color={'#421C52' as any} />
       </mesh>
     </group>
   );
