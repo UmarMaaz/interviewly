@@ -23,6 +23,10 @@ export const speak = (text: string): void => {
   utterance.pitch = 1.1; // Slightly higher pitch
   utterance.volume = 1.0;
   
+  // Add natural pauses with punctuation
+  text = addNaturalPauses(text);
+  utterance.text = text;
+  
   // Get all available voices
   let voices = synth.getVoices();
   
@@ -39,6 +43,18 @@ export const speak = (text: string): void => {
   
   // Start speaking
   synth.speak(utterance);
+};
+
+/**
+ * Helper function to add natural pauses
+ */
+const addNaturalPauses = (text: string): string => {
+  // Add slight pauses after punctuation for more natural speech
+  return text
+    .replace(/\./g, '. ') // Add slight pause after periods
+    .replace(/\?/g, '? ') // Add slight pause after questions
+    .replace(/\!/g, '! ') // Add slight pause after exclamations
+    .replace(/,/g, ', '); // Add slight pause after commas
 };
 
 /**
@@ -83,3 +99,24 @@ export const stop = (): void => {
 export const isSpeaking = (): boolean => {
   return synth ? synth.speaking : false;
 };
+
+/**
+ * Get conversation filler phrases for natural dialogue
+ */
+export const getAcknowledgmentPhrase = (): string => {
+  const phrases = [
+    "I see, ",
+    "That's interesting. ",
+    "Thank you for sharing that. ",
+    "I understand. ",
+    "Great point. ",
+    "That makes sense. ",
+    "Okay, good to know. ",
+    "Thanks for explaining. ",
+    "I appreciate your response. ",
+    "That's helpful context. "
+  ];
+  
+  return phrases[Math.floor(Math.random() * phrases.length)];
+};
+

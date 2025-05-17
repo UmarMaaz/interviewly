@@ -1,12 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/use-toast';
 import Avatar from '@/components/Avatar';
 import QuestionPanel from '@/components/QuestionPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
-import { UserProfile, generateQuestions, getAIFeedback, InterviewQuestion, Feedback, startSpeechRecognition } from '@/utils/interviewService';
+import { UserProfile, generateQuestions, getAIFeedback, InterviewQuestion, Feedback } from '@/utils/interviewService';
+import { getAcknowledgmentPhrase } from '@/utils/textToSpeech';
 
 interface InterviewRoomProps {
   userProfile: UserProfile;
@@ -23,6 +25,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   const [interviewComplete, setInterviewComplete] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [currentSpeechText, setCurrentSpeechText] = useState<string>('');
+  const [isAcknowledging, setIsAcknowledging] = useState(false);
   
   // Generate initial questions
   useEffect(() => {
@@ -35,12 +38,16 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         
         // Set initial greeting text for the avatar to speak
         if (initialQuestions.length > 0) {
-          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach. Let's begin with the first question: ${initialQuestions[0].question}`;
+          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. Let's begin with the first question: ${initialQuestions[0].question}`;
           setCurrentSpeechText(greeting);
         }
       } catch (error) {
         console.error("Error generating questions:", error);
-        toast.error("Failed to generate interview questions. Please try again.");
+        toast({
+          title: "Error",
+          description: "Failed to generate interview questions. Please try again.",
+          variant: "destructive"
+        });
         setIsGeneratingQuestions(false);
       }
     };
@@ -67,35 +74,50 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   // When interview completes, have avatar say goodbye
   useEffect(() => {
     if (interviewComplete) {
-      setCurrentSpeechText(`Congratulations ${userProfile.name}! You've completed your mock interview for the ${userProfile.role} position. I hope this practice session was helpful.`);
+      setCurrentSpeechText(`Congratulations ${userProfile.name}! You've completed your mock interview for the ${userProfile.role} position. I hope this practice session was helpful for your future interviews.`);
     }
   }, [interviewComplete, userProfile]);
 
   const handleSubmitResponse = async () => {
     if (!userResponse.trim()) {
-      toast.warning("Please provide a response before submitting.");
+      toast({
+        title: "Warning",
+        description: "Please provide a response before submitting.",
+        variant: "warning"
+      });
       return;
     }
     
-    setIsLoading(true);
+    // First, acknowledge the response with a conversational phrase
+    setIsAcknowledging(true);
+    const acknowledgment = getAcknowledgmentPhrase();
+    setCurrentSpeechText(acknowledgment);
     
-    try {
+    // Short delay to let the acknowledgment be spoken before showing loading state
+    setTimeout(() => {
+      setIsAcknowledging(false);
+      setIsLoading(true);
+      
       // Get AI feedback on the response
       const currentQuestion = questions[currentQuestionIndex];
-      const responseFeedback = await getAIFeedback(
+      getAIFeedback(
         currentQuestion.question, 
         userResponse, 
         userProfile
-      );
-      
-      setFeedback(responseFeedback);
-      setIsFeedbackMode(true);
-      setIsLoading(false);
-    } catch (error) {
-      console.error("Error getting feedback:", error);
-      toast.error("Failed to analyze your response. Please try again.");
-      setIsLoading(false);
-    }
+      ).then(responseFeedback => {
+        setFeedback(responseFeedback);
+        setIsFeedbackMode(true);
+        setIsLoading(false);
+      }).catch(error => {
+        console.error("Error getting feedback:", error);
+        toast({
+          title: "Error",
+          description: "Failed to analyze your response. Please try again.",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+      });
+    }, 1500); // Allow time for the acknowledgment to be spoken
   };
 
   const handleNextQuestion = () => {
@@ -104,7 +126,22 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     setFeedback(null);
     
     if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
+      // Add a conversational transition between questions
+      const transitionPhrases = [
+        "Let's move on to the next question.",
+        "Now, let's continue with the next topic.",
+        "Great, let's proceed to the next question.",
+        "Moving forward to our next question.",
+        "Let's explore another aspect of your experience."
+      ];
+      
+      const transition = transitionPhrases[Math.floor(Math.random() * transitionPhrases.length)];
+      setCurrentSpeechText(transition);
+      
+      // Short delay before showing the next question
+      setTimeout(() => {
+        setCurrentQuestionIndex(currentQuestionIndex + 1);
+      }, 1500);
     } else {
       setInterviewComplete(true);
     }
@@ -122,7 +159,11 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
 
     // Check for browser compatibility
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      toast.error("Speech recognition is not supported in your browser.");
+      toast({
+        title: "Error",
+        description: "Speech recognition is not supported in your browser.",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -137,7 +178,10 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       
       recognition.onstart = () => {
         setIsListening(true);
-        toast.info("Listening...");
+        toast({
+          title: "Listening",
+          description: "Speak your answer now...",
+        });
       };
       
       recognition.onresult = (event: any) => {
@@ -151,7 +195,11 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error', event.error);
-        toast.error(`Speech recognition error: ${event.error}`);
+        toast({
+          title: "Error",
+          description: `Speech recognition error: ${event.error}`,
+          variant: "destructive"
+        });
         setIsListening(false);
       };
       
@@ -165,14 +213,21 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       recognition.start();
     } catch (error) {
       console.error("Error starting speech recognition:", error);
-      toast.error("Could not start voice input. Please try again.");
+      toast({
+        title: "Error",
+        description: "Could not start voice input. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
   const stopListening = () => {
     if ((window as any).recognitionInstance) {
       (window as any).recognitionInstance.stop();
-      toast.info("Voice input stopped");
+      toast({
+        title: "Voice input stopped",
+        description: "You can continue typing your answer.",
+      });
       setIsListening(false);
     }
   };
@@ -185,7 +240,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       <div className="lg:col-span-2 flex flex-col justify-center items-center">
         <Card className="w-full aspect-square relative flex items-center justify-center shadow-lg">
           <Avatar 
-            isSpeaking={!isFeedbackMode && !isGeneratingQuestions || (isFeedbackMode && !!feedback)} 
+            isSpeaking={!isFeedbackMode && !isGeneratingQuestions || (isFeedbackMode && !!feedback) || isAcknowledging} 
             mood={isFeedbackMode ? (feedback?.positive ? 'positive' : 'neutral') : 'neutral'}
             text={currentSpeechText}
           />
