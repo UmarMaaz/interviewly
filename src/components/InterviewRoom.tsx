@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -6,8 +7,9 @@ import { toast } from '@/hooks/use-toast';
 import Avatar from '@/components/Avatar';
 import QuestionPanel from '@/components/QuestionPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
+import ApiKeyModal from '@/components/ApiKeyModal';
 import { UserProfile, generateQuestions, getAIFeedback, InterviewQuestion, Feedback } from '@/utils/interviewService';
-import { getAcknowledgmentPhrase } from '@/utils/textToSpeech';
+import { getAcknowledgmentPhrase, getTransitionPhrase } from '@/utils/textToSpeech';
 
 interface InterviewRoomProps {
   userProfile: UserProfile;
@@ -25,6 +27,10 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   const [isListening, setIsListening] = useState(false);
   const [currentSpeechText, setCurrentSpeechText] = useState<string>('');
   const [isAcknowledging, setIsAcknowledging] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(true);
+  const [conversationState, setConversationState] = useState<
+    'greeting' | 'asking' | 'acknowledging' | 'feedback' | 'transition' | 'complete'
+  >('greeting');
   
   // Generate initial questions
   useEffect(() => {
@@ -34,10 +40,11 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         const initialQuestions = await generateQuestions(userProfile);
         setQuestions(initialQuestions);
         setIsGeneratingQuestions(false);
+        setConversationState('greeting');
         
         // Set initial greeting text for the avatar to speak
         if (initialQuestions.length > 0) {
-          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. Let's begin with the first question: ${initialQuestions[0].question}`;
+          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you some questions today and providing feedback on your answers. Let's begin with the first question: ${initialQuestions[0].question}`;
           setCurrentSpeechText(greeting);
         }
       } catch (error) {
@@ -54,28 +61,72 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     initInterview();
   }, [userProfile]);
 
-  // When the current question changes, update the speech text
+  // Manage conversation flow and speech based on state
   useEffect(() => {
-    if (!isGeneratingQuestions && questions.length > 0 && !isFeedbackMode && !interviewComplete) {
-      const currentQuestion = questions[currentQuestionIndex];
-      setCurrentSpeechText(currentQuestion.question);
+    if (isGeneratingQuestions) return;
+    
+    // Set speech text based on conversation state
+    switch (conversationState) {
+      case 'greeting':
+        if (questions.length > 0) {
+          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you some questions today and providing feedback on your answers. Let's begin with the first question: ${questions[0].question}`;
+          setCurrentSpeechText(greeting);
+          
+          // Move to asking state after a delay so the greeting can be spoken
+          setTimeout(() => {
+            setConversationState('asking');
+          }, 500); 
+        }
+        break;
+        
+      case 'asking':
+        if (questions.length > 0 && currentQuestionIndex < questions.length) {
+          const currentQuestion = questions[currentQuestionIndex];
+          setCurrentSpeechText(currentQuestion.question);
+        }
+        break;
+        
+      case 'acknowledging':
+        if (isAcknowledging) {
+          // Just use the current acknowledgment text
+        }
+        break;
+        
+      case 'feedback':
+        if (isFeedbackMode && feedback) {
+          const feedbackIntro = feedback.positive ? 
+            "I appreciate your response. Here's some positive feedback: " : 
+            "Thank you for your answer. Here's some constructive feedback: ";
+            
+          const feedbackText = `${feedbackIntro} ${feedback.contentFeedback} ${feedback.deliveryFeedback} ${feedback.improvementTips || ''}`;
+          setCurrentSpeechText(feedbackText);
+        }
+        break;
+        
+      case 'transition':
+        const transition = getTransitionPhrase();
+        if (currentQuestionIndex < questions.length - 1) {
+          const nextQuestion = questions[currentQuestionIndex + 1].question;
+          setCurrentSpeechText(`${transition} ${nextQuestion}`);
+        } else {
+          setCurrentSpeechText(`${transition} That was our final question.`);
+        }
+        break;
+        
+      case 'complete':
+        setCurrentSpeechText(`Congratulations ${userProfile.name}! You've completed your mock interview for the ${userProfile.role} position. I hope this practice session was helpful for your future interviews.`);
+        break;
     }
-  }, [currentQuestionIndex, questions, isGeneratingQuestions, isFeedbackMode, interviewComplete]);
-
-  // When feedback is received, make the avatar speak the feedback
-  useEffect(() => {
-    if (isFeedbackMode && feedback) {
-      const feedbackText = `${feedback.positive ? 'Good job!' : 'Let\'s improve that answer.'} ${feedback.contentFeedback} ${feedback.deliveryFeedback} ${feedback.improvementTips || ''}`;
-      setCurrentSpeechText(feedbackText);
-    }
-  }, [isFeedbackMode, feedback]);
-
-  // When interview completes, have avatar say goodbye
-  useEffect(() => {
-    if (interviewComplete) {
-      setCurrentSpeechText(`Congratulations ${userProfile.name}! You've completed your mock interview for the ${userProfile.role} position. I hope this practice session was helpful for your future interviews.`);
-    }
-  }, [interviewComplete, userProfile]);
+  }, [
+    conversationState, 
+    questions, 
+    currentQuestionIndex, 
+    isFeedbackMode, 
+    feedback, 
+    isAcknowledging, 
+    userProfile,
+    isGeneratingQuestions
+  ]);
 
   const handleSubmitResponse = async () => {
     if (!userResponse.trim()) {
@@ -89,6 +140,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     
     // First, acknowledge the response with a conversational phrase
     setIsAcknowledging(true);
+    setConversationState('acknowledging');
     const acknowledgment = getAcknowledgmentPhrase();
     setCurrentSpeechText(acknowledgment);
     
@@ -106,6 +158,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       ).then(responseFeedback => {
         setFeedback(responseFeedback);
         setIsFeedbackMode(true);
+        setConversationState('feedback');
         setIsLoading(false);
       }).catch(error => {
         console.error("Error getting feedback:", error);
@@ -116,7 +169,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         });
         setIsLoading(false);
       });
-    }, 1500); // Allow time for the acknowledgment to be spoken
+    }, 2000); // Allow time for the acknowledgment to be spoken
   };
 
   const handleNextQuestion = () => {
@@ -126,23 +179,16 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     
     if (currentQuestionIndex < questions.length - 1) {
       // Add a conversational transition between questions
-      const transitionPhrases = [
-        "Let's move on to the next question.",
-        "Now, let's continue with the next topic.",
-        "Great, let's proceed to the next question.",
-        "Moving forward to our next question.",
-        "Let's explore another aspect of your experience."
-      ];
-      
-      const transition = transitionPhrases[Math.floor(Math.random() * transitionPhrases.length)];
-      setCurrentSpeechText(transition);
+      setConversationState('transition');
       
       // Short delay before showing the next question
       setTimeout(() => {
         setCurrentQuestionIndex(currentQuestionIndex + 1);
-      }, 1500);
+        setConversationState('asking');
+      }, 2000);
     } else {
       setInterviewComplete(true);
+      setConversationState('complete');
     }
   };
 
@@ -232,14 +278,23 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   };
 
   const currentQuestion = questions[currentQuestionIndex];
+  const isSpeaking = conversationState === 'greeting' || 
+                     conversationState === 'asking' || 
+                     conversationState === 'acknowledging' || 
+                     (conversationState === 'feedback' && isFeedbackMode) || 
+                     conversationState === 'transition' || 
+                     conversationState === 'complete';
 
   return (
     <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-8">
+      {/* API Key Modal */}
+      <ApiKeyModal onComplete={() => setShowApiKeyModal(false)} />
+
       {/* Avatar Section */}
       <div className="lg:col-span-2 flex flex-col justify-center items-center">
         <Card className="w-full aspect-square relative flex items-center justify-center shadow-lg">
           <Avatar 
-            isSpeaking={!isFeedbackMode && !isGeneratingQuestions || (isFeedbackMode && !!feedback) || isAcknowledging} 
+            isSpeaking={isSpeaking} 
             mood={isFeedbackMode ? (feedback?.positive ? 'positive' : 'neutral') : 'neutral'}
             text={currentSpeechText}
           />

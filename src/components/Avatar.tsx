@@ -66,22 +66,28 @@ const AvatarModel = ({ isSpeaking, mood }: { isSpeaking: boolean; mood: string }
 const Avatar: React.FC<AvatarProps> = ({ isSpeaking, mood, text }) => {
   // Use a ref to track changes to isSpeaking and text props
   const lastTextRef = useRef<string | undefined>();
+  const isCurrentlySpeaking = useRef<boolean>(false);
   
   useEffect(() => {
     // If we have a new text to speak and the avatar is instructed to speak
-    if (text && text !== lastTextRef.current && isSpeaking) {
-      tts.speak(text);
+    if (text && text !== lastTextRef.current && isSpeaking && !isCurrentlySpeaking.current) {
+      isCurrentlySpeaking.current = true;
+      tts.speak(text).finally(() => {
+        isCurrentlySpeaking.current = false;
+      });
       lastTextRef.current = text;
     }
     
     // If the avatar should stop speaking
-    if (!isSpeaking) {
+    if (!isSpeaking && isCurrentlySpeaking.current) {
       tts.stop();
+      isCurrentlySpeaking.current = false;
     }
     
     return () => {
       // Clean up on unmount
       tts.stop();
+      isCurrentlySpeaking.current = false;
     };
   }, [isSpeaking, text]);
   
@@ -101,7 +107,7 @@ const Avatar: React.FC<AvatarProps> = ({ isSpeaking, mood, text }) => {
         />
       </Canvas>
       
-      {isSpeaking && (
+      {isSpeaking && tts.isSpeaking() && (
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
           <div className="flex space-x-1">
             <div className="w-2 h-2 bg-interview-accent rounded-full animate-pulse"></div>
