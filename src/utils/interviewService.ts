@@ -37,11 +37,18 @@ const callGeminiAPI = async (
   try {
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
     
+    // Instead of using system role (which is not supported), 
+    // include the system instruction in the user prompt if provided
+    let fullPrompt = prompt;
+    if (systemInstruction) {
+      fullPrompt = `${systemInstruction}\n\n${prompt}`;
+    }
+    
     const requestBody: any = {
       contents: [
         {
           role: "user",
-          parts: [{ text: prompt }]
+          parts: [{ text: fullPrompt }]
         }
       ],
       generationConfig: {
@@ -52,15 +59,7 @@ const callGeminiAPI = async (
       },
     };
 
-    // Add system instruction if provided
-    if (systemInstruction) {
-      requestBody.contents.unshift({
-        role: "system",
-        parts: [{ text: systemInstruction }]
-      });
-    }
-
-    console.log("Sending request to Gemini API:", { prompt: prompt.substring(0, 100) + "..." });
+    console.log("Sending request to Gemini API:", { prompt: fullPrompt.substring(0, 100) + "..." });
     
     // Add timeout to fetch request
     const controller = new AbortController();
