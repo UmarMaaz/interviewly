@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 import Avatar from '@/components/Avatar';
 import QuestionPanel from '@/components/QuestionPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
@@ -83,7 +82,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       toast({
         title: "Warning",
         description: "Please provide a response before submitting.",
-        variant: "warning"
+        variant: "default"
       });
       return;
     }
