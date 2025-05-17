@@ -11,14 +11,31 @@ interface ApiKeyModalProps {
 }
 
 const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onComplete }) => {
-  const [open, setOpen] = useState(!hasApiKey());
+  const [open, setOpen] = useState(false);
   const [apiKey, setApiKeyValue] = useState('');
 
   useEffect(() => {
     // Check if API key is already set
     const hasKey = hasApiKey();
+    
+    // If no key is set, automatically set the provided key
+    if (!hasKey) {
+      const elevenLabsApiKey = 'sk_cebaf96eb4f194eccb2555bb521e3fa4bf53e38ea3d8d55c';
+      setApiKey(elevenLabsApiKey);
+      
+      toast({
+        title: "Success",
+        description: "ElevenLabs API key set automatically. Voice quality has been upgraded!",
+        variant: "default"
+      });
+      
+      if (onComplete) {
+        onComplete();
+      }
+    }
+    
     setOpen(!hasKey);
-  }, []);
+  }, [onComplete]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
