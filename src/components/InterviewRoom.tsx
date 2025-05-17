@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -138,6 +137,11 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       return;
     }
     
+    // Stop listening if it's active
+    if (isListening) {
+      stopListening();
+    }
+    
     // First, acknowledge the response with a conversational phrase
     setIsAcknowledging(true);
     setConversationState('acknowledging');
@@ -218,7 +222,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       const recognition = new SpeechRecognition();
       
       recognition.continuous = true;
-      recognition.interimResults = true;
+      recognition.interimResults = false; // Changed to false to prevent repeating words
       recognition.lang = 'en-US';
       
       recognition.onstart = () => {
@@ -229,13 +233,19 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         });
       };
       
+      // Fixed to prevent repeating words - only update response on final result
       recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
-          .map((result: any) => result[0])
-          .map((result: any) => result.transcript)
-          .join('');
+        const lastResultIndex = event.results.length - 1;
+        const transcript = event.results[lastResultIndex][0].transcript;
         
-        setUserResponse(transcript);
+        // Append to existing response rather than replacing it each time
+        setUserResponse(prev => {
+          // Avoid duplication by checking if transcript is already part of the response
+          if (prev.includes(transcript)) {
+            return prev;
+          }
+          return prev + " " + transcript;
+        });
       };
       
       recognition.onerror = (event: any) => {
@@ -248,8 +258,18 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         setIsListening(false);
       };
       
+      // Don't automatically end recognition
       recognition.onend = () => {
-        setIsListening(false);
+        // Instead of stopping listening, restart if still in listening mode
+        // This prevents premature closing of voice input
+        if (isListening) {
+          try {
+            recognition.start();
+          } catch (error) {
+            console.error("Error restarting speech recognition:", error);
+            setIsListening(false);
+          }
+        }
       };
       
       // Store recognition instance in window to be able to stop it later

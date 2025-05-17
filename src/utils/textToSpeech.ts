@@ -1,4 +1,3 @@
-
 /**
  * Text-to-Speech utility for the AI avatar
  * Uses ElevenLabs API for high-quality voice and Web Speech API as fallback
@@ -231,20 +230,26 @@ export const isSpeaking = (): boolean => {
 };
 
 /**
- * Get conversation filler phrases for natural dialogue
+ * Get conversation acknowledgment phrases for natural dialogue
+ * These are used to respond to the user's answer before providing feedback
  */
 export const getAcknowledgmentPhrase = (): string => {
   const phrases = [
-    "I see, ",
-    "That's interesting. ",
-    "Thank you for sharing that. ",
-    "I understand. ",
-    "Great point. ",
-    "That makes sense. ",
-    "Okay, good to know. ",
-    "Thanks for explaining. ",
-    "I appreciate your response. ",
-    "That's helpful context. "
+    "I see, thank you for sharing that perspective. ",
+    "That's really interesting. I appreciate your detailed response. ",
+    "Thank you for that thoughtful answer. ",
+    "I understand what you're saying. That's helpful context. ",
+    "Great point. I like how you approached that question. ",
+    "That makes a lot of sense. Thanks for explaining your thought process. ",
+    "Okay, I appreciate how you framed that response. ",
+    "Thanks for sharing that experience. It gives me good insight. ",
+    "I appreciate your comprehensive response. ",
+    "That's a valuable perspective. Thank you for elaborating. ",
+    "I see how you're thinking about this. Thanks for your candid response. ",
+    "Thank you for that well-structured answer. ",
+    "That's a thoughtful approach to the question. ",
+    "I appreciate you sharing your personal experience with this topic. ",
+    "Thank you for that detailed explanation. "
   ];
   
   return phrases[Math.floor(Math.random() * phrases.length)];
@@ -252,21 +257,26 @@ export const getAcknowledgmentPhrase = (): string => {
 
 /**
  * Get conversation transition phrases
+ * These are used when moving from one question to the next
  */
 export const getTransitionPhrase = (): string => {
   const phrases = [
-    "Let's move on to the next question. ",
-    "Now, let's continue with the next topic. ",
-    "Great, let's proceed to the next question. ",
-    "Moving forward to our next question. ",
+    "Let's move on to our next question. I'm interested to hear your thoughts on... ",
+    "Now, I'd like to shift gears a bit and ask about... ",
+    "Great, let's proceed to another important topic. ",
+    "Moving forward, I'd like to ask you about... ",
     "Let's explore another aspect of your experience. ",
-    "Excellent response. For our next question... ",
-    "Thank you for that answer. Now I'd like to ask you about... ",
-    "That's helpful to know. Let's shift our discussion to... ",
-    "Well articulated. Moving on, I'd like to ask... ",
-    "I appreciate that response. Next, I'd like to hear about... "
+    "Excellent response. For our next question, I'd like to understand... ",
+    "Thank you for that answer. Now, I'm curious about... ",
+    "That's helpful to know. Let's talk about something different now... ",
+    "Well articulated. Let's build on that with our next question... ",
+    "I appreciate that response. Let's dive into another area... ",
+    "That gives me a good picture. Let's switch topics and discuss... ",
+    "Thanks for sharing that. Moving to our next question... ",
+    "Very insightful. Let's continue with another important question... ",
+    "That's valuable information. Now I'd like to hear about... ",
+    "Thank you for that perspective. Let's talk about something else... "
   ];
   
   return phrases[Math.floor(Math.random() * phrases.length)];
 };
-
