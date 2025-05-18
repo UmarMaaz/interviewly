@@ -1,3 +1,4 @@
+
 /**
  * Text-to-Speech utility for the AI avatar
  * Uses ElevenLabs API for high-quality voice and Web Speech API as fallback
@@ -13,6 +14,9 @@ let currentVoiceId = DEFAULT_VOICE_ID;
 // Current speaking state
 let isSpeakingState = false;
 let currentAudio: HTMLAudioElement | null = null;
+
+// Speech completion callback
+let onSpeechCompleteCallback: (() => void) | null = null;
 
 // Fallback to Web Speech API
 const synth = window.speechSynthesis;
@@ -42,6 +46,13 @@ export const hasApiKey = (): boolean => {
  */
 export const setVoiceId = (voiceId: string): void => {
   currentVoiceId = voiceId;
+};
+
+/**
+ * Register a callback to be called when speech completes
+ */
+export const onSpeechComplete = (callback: () => void): void => {
+  onSpeechCompleteCallback = callback;
 };
 
 /**
@@ -115,6 +126,12 @@ const speakWithElevenLabs = async (text: string): Promise<void> => {
       isSpeakingState = false;
       URL.revokeObjectURL(audioUrl);
       currentAudio = null;
+      
+      // Call completion callback if registered
+      if (onSpeechCompleteCallback) {
+        onSpeechCompleteCallback();
+        onSpeechCompleteCallback = null;
+      }
     };
     
     await audio.play();
@@ -158,6 +175,12 @@ const speakWithWebSpeechAPI = (text: string): void => {
   // Set end handler
   utterance.onend = () => {
     isSpeakingState = false;
+    
+    // Call completion callback if registered
+    if (onSpeechCompleteCallback) {
+      onSpeechCompleteCallback();
+      onSpeechCompleteCallback = null;
+    }
   };
   
   // Start speaking

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -8,7 +9,7 @@ import QuestionPanel from '@/components/QuestionPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
 import ApiKeyModal from '@/components/ApiKeyModal';
 import { UserProfile, generateQuestions, getAIFeedback, InterviewQuestion, Feedback } from '@/utils/interviewService';
-import { getAcknowledgmentPhrase, getTransitionPhrase } from '@/utils/textToSpeech';
+import { getAcknowledgmentPhrase, getTransitionPhrase, speak, isSpeaking, stop } from '@/utils/textToSpeech';
 
 interface InterviewRoomProps {
   userProfile: UserProfile;
@@ -43,7 +44,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         
         // Set initial greeting text for the avatar to speak
         if (initialQuestions.length > 0) {
-          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you some questions today and providing feedback on your answers. Let's begin with the first question: ${initialQuestions[0].question}`;
+          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you some questions today and providing feedback on your answers.`;
           setCurrentSpeechText(greeting);
         }
       } catch (error) {
@@ -68,13 +69,18 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     switch (conversationState) {
       case 'greeting':
         if (questions.length > 0) {
-          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you some questions today and providing feedback on your answers. Let's begin with the first question: ${questions[0].question}`;
+          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you some questions today and providing feedback on your answers.`;
           setCurrentSpeechText(greeting);
           
-          // Move to asking state after a delay so the greeting can be spoken
-          setTimeout(() => {
-            setConversationState('asking');
-          }, 500); 
+          // Move to asking state after the greeting is complete
+          const checkSpeechComplete = setInterval(() => {
+            if (!isSpeaking()) {
+              clearInterval(checkSpeechComplete);
+              setTimeout(() => {
+                setConversationState('asking');
+              }, 500);
+            }
+          }, 300);
         }
         break;
         
@@ -86,9 +92,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         break;
         
       case 'acknowledging':
-        if (isAcknowledging) {
-          // Just use the current acknowledgment text
-        }
+        // Just use the current acknowledgment text
         break;
         
       case 'feedback':
@@ -127,6 +131,13 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     isGeneratingQuestions
   ]);
 
+  // Effect to handle speech and ensure completed speaking before moving to next state
+  useEffect(() => {
+    if (currentSpeechText) {
+      speak(currentSpeechText);
+    }
+  }, [currentSpeechText]);
+
   const handleSubmitResponse = async () => {
     if (!userResponse.trim()) {
       toast({
@@ -148,8 +159,15 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     const acknowledgment = getAcknowledgmentPhrase();
     setCurrentSpeechText(acknowledgment);
     
-    // Short delay to let the acknowledgment be spoken before showing loading state
-    setTimeout(() => {
+    // Wait until the acknowledgment speech is complete before analyzing
+    const checkAcknowledgmentComplete = setInterval(() => {
+      if (!isSpeaking()) {
+        clearInterval(checkAcknowledgmentComplete);
+        proceedWithFeedback();
+      }
+    }, 300);
+    
+    const proceedWithFeedback = () => {
       setIsAcknowledging(false);
       setIsLoading(true);
       
@@ -173,10 +191,15 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         });
         setIsLoading(false);
       });
-    }, 2000); // Allow time for the acknowledgment to be spoken
+    };
   };
 
   const handleNextQuestion = () => {
+    // Wait for any current speech to finish first
+    if (isSpeaking()) {
+      stop();
+    }
+    
     setIsFeedbackMode(false);
     setUserResponse('');
     setFeedback(null);
@@ -185,19 +208,18 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       // Add a conversational transition between questions
       setConversationState('transition');
       
-      // Short delay before showing the next question
-      setTimeout(() => {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
-        setConversationState('asking');
-      }, 2000);
+      // Wait until the transition speech is complete before showing the next question
+      const checkTransitionComplete = setInterval(() => {
+        if (!isSpeaking()) {
+          clearInterval(checkTransitionComplete);
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+          setConversationState('asking');
+        }
+      }, 300);
     } else {
       setInterviewComplete(true);
       setConversationState('complete');
     }
-  };
-
-  const handleRestartInterview = () => {
-    window.location.reload();
   };
 
   const handleToggleMicrophone = () => {
@@ -233,19 +255,22 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         });
       };
       
-      // Fixed to prevent repeating words - only update response on final result
+      // Store previous transcripts to avoid repetition
+      const previousTranscripts = new Set();
+      
       recognition.onresult = (event: any) => {
         const lastResultIndex = event.results.length - 1;
         const transcript = event.results[lastResultIndex][0].transcript;
         
-        // Append to existing response rather than replacing it each time
-        setUserResponse(prev => {
-          // Avoid duplication by checking if transcript is already part of the response
-          if (prev.includes(transcript)) {
-            return prev;
-          }
-          return prev + " " + transcript;
-        });
+        // Prevent repetition by checking if we've seen this transcript
+        if (!previousTranscripts.has(transcript)) {
+          previousTranscripts.add(transcript);
+          
+          setUserResponse(prev => {
+            // Add space only if there's existing content
+            return prev ? `${prev} ${transcript}` : transcript;
+          });
+        }
       };
       
       recognition.onerror = (event: any) => {
