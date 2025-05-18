@@ -222,6 +222,41 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     }
   };
 
+  // Add the missing handleRestartInterview function
+  const handleRestartInterview = () => {
+    // Reset all states to initial values
+    setUserResponse('');
+    setFeedback(null);
+    setCurrentQuestionIndex(0);
+    setIsFeedbackMode(false);
+    setInterviewComplete(false);
+    setIsListening(false);
+    setIsAcknowledging(false);
+    setConversationState('greeting');
+    
+    // Re-generate questions (reusing the same initInterview logic)
+    setIsGeneratingQuestions(true);
+    generateQuestions(userProfile)
+      .then(initialQuestions => {
+        setQuestions(initialQuestions);
+        setIsGeneratingQuestions(false);
+        // Set initial greeting
+        if (initialQuestions.length > 0) {
+          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you some questions today and providing feedback on your answers.`;
+          setCurrentSpeechText(greeting);
+        }
+      })
+      .catch(error => {
+        console.error("Error generating questions:", error);
+        toast({
+          title: "Error",
+          description: "Failed to generate interview questions. Please try again.",
+          variant: "destructive"
+        });
+        setIsGeneratingQuestions(false);
+      });
+  };
+
   const handleToggleMicrophone = () => {
     if (isListening) {
       stopListening();
@@ -323,12 +358,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   };
 
   const currentQuestion = questions[currentQuestionIndex];
-  const isSpeaking = conversationState === 'greeting' || 
-                     conversationState === 'asking' || 
-                     conversationState === 'acknowledging' || 
-                     (conversationState === 'feedback' && isFeedbackMode) || 
-                     conversationState === 'transition' || 
-                     conversationState === 'complete';
+  const isSpeakingNow = isSpeaking();
 
   return (
     <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -339,7 +369,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       <div className="lg:col-span-2 flex flex-col justify-center items-center">
         <Card className="w-full aspect-square relative flex items-center justify-center shadow-lg">
           <Avatar 
-            isSpeaking={isSpeaking} 
+            isSpeaking={isSpeakingNow} 
             mood={isFeedbackMode ? (feedback?.positive ? 'positive' : 'neutral') : 'neutral'}
             text={currentSpeechText}
           />
