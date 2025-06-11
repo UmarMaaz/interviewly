@@ -32,7 +32,20 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     'greeting' | 'asking' | 'acknowledging' | 'transition' | 'finalFeedback' | 'complete'
   >('greeting');
   const [speechRecognition, setSpeechRecognition] = useState<any>(null);
+  const [speechSupportChecked, setSpeechSupportChecked] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
   
+  // Check speech recognition support on mount
+  useEffect(() => {
+    const checkSpeechSupport = () => {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      setSpeechSupported(!!SpeechRecognition);
+      setSpeechSupportChecked(true);
+    };
+    
+    checkSpeechSupport();
+  }, []);
+
   // Generate initial questions
   useEffect(() => {
     const initInterview = async () => {
@@ -236,16 +249,155 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       });
   };
 
+  const createSpeechRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      throw new Error('Speech recognition not supported');
+    }
+
+    const recognition = new SpeechRecognition();
+    
+    // Configure recognition settings
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.maxAlternatives = 1;
+    
+    let finalTranscript = '';
+    let isRecognitionActive = true;
+    
+    recognition.onstart = () => {
+      console.log("Speech recognition started successfully");
+      setIsListening(true);
+      isRecognitionActive = true;
+      toast({
+        title: "Voice Input Active",
+        description: "Speak now. Click the button again to stop recording.",
+      });
+    };
+    
+    recognition.onresult = (event: any) => {
+      console.log("Speech recognition result received:", event);
+      
+      let interimTranscript = '';
+      
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+      
+      // Update the textarea with final + interim results
+      const currentTranscript = finalTranscript + interimTranscript;
+      if (currentTranscript.trim()) {
+        setUserResponse(currentTranscript.trim());
+      }
+    };
+    
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error, event);
+      
+      if (!isRecognitionActive) {
+        return; // Ignore errors after manual stop
+      }
+      
+      setIsListening(false);
+      setSpeechRecognition(null);
+      
+      let errorMessage = "Voice input encountered an error.";
+      let shouldRetry = false;
+      
+      switch (event.error) {
+        case 'network':
+          errorMessage = "Network connection issue. Please check your internet and try again.";
+          shouldRetry = true;
+          break;
+        case 'not-allowed':
+          errorMessage = "Microphone access denied. Please allow microphone permissions and try again.";
+          break;
+        case 'no-speech':
+          errorMessage = "No speech detected. Please try speaking again.";
+          shouldRetry = true;
+          break;
+        case 'audio-capture':
+          errorMessage = "No microphone found. Please check your audio devices.";
+          break;
+        case 'service-not-allowed':
+          errorMessage = "Speech service not available. Please try using HTTPS or a different browser.";
+          break;
+        case 'aborted':
+          // Don't show error for manual stops
+          return;
+        default:
+          errorMessage = `Voice input error: ${event.error}. Please try again.`;
+          shouldRetry = true;
+      }
+      
+      toast({
+        title: "Voice Input Error",
+        description: errorMessage,
+        variant: "destructive"
+      });
+      
+      // Auto-retry for network errors after a delay
+      if (shouldRetry && event.error === 'network') {
+        setTimeout(() => {
+          if (!isListening) {
+            toast({
+              title: "Retrying Voice Input",
+              description: "Attempting to reconnect...",
+            });
+            handleToggleMicrophone();
+          }
+        }, 2000);
+      }
+    };
+    
+    recognition.onend = () => {
+      console.log("Speech recognition ended");
+      
+      if (isRecognitionActive && isListening) {
+        // If recognition ended unexpectedly but we're still supposed to be listening, restart
+        console.log("Recognition ended unexpectedly, restarting...");
+        setTimeout(() => {
+          if (isListening && speechRecognition) {
+            try {
+              recognition.start();
+            } catch (error) {
+              console.error("Failed to restart recognition:", error);
+              setIsListening(false);
+              setSpeechRecognition(null);
+            }
+          }
+        }, 100);
+      } else {
+        setIsListening(false);
+        setSpeechRecognition(null);
+      }
+    };
+    
+    // Store the stop function
+    recognition.stopRecognition = () => {
+      isRecognitionActive = false;
+      recognition.stop();
+    };
+    
+    return recognition;
+  };
+
   const handleToggleMicrophone = async () => {
     if (isListening) {
       stopListening();
       return;
     }
 
-    // Check for browser compatibility
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
+    // Check for browser support
+    if (!speechSupported) {
       toast({
         title: "Not Supported",
         description: "Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.",
@@ -268,82 +420,8 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     }
 
     try {
-      const recognition = new SpeechRecognition();
+      const recognition = createSpeechRecognition();
       setSpeechRecognition(recognition);
-      
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-      recognition.maxAlternatives = 1;
-      
-      recognition.onstart = () => {
-        console.log("Speech recognition started");
-        setIsListening(true);
-        toast({
-          title: "Listening",
-          description: "Speak your answer now. Click the button again to stop.",
-        });
-      };
-      
-      recognition.onresult = (event: any) => {
-        console.log("Speech recognition result:", event);
-        if (event.results.length > 0) {
-          const transcript = event.results[0][0].transcript;
-          console.log("Transcript:", transcript);
-          
-          setUserResponse(prev => {
-            const newResponse = prev ? `${prev} ${transcript}` : transcript;
-            return newResponse;
-          });
-        }
-      };
-      
-      recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-        setSpeechRecognition(null);
-        
-        let errorMessage = "Speech recognition error occurred.";
-        switch (event.error) {
-          case 'network':
-            errorMessage = "Network error. Please check your internet connection and try again.";
-            break;
-          case 'not-allowed':
-            errorMessage = "Microphone access denied. Please allow microphone permissions.";
-            break;
-          case 'no-speech':
-            errorMessage = "No speech detected. Please try speaking again.";
-            break;
-          case 'audio-capture':
-            errorMessage = "No microphone found. Please check your audio devices.";
-            break;
-          case 'service-not-allowed':
-            errorMessage = "Speech service not allowed. Please try using HTTPS.";
-            break;
-          default:
-            errorMessage = `Speech recognition error: ${event.error}`;
-        }
-        
-        toast({
-          title: "Voice Input Error",
-          description: errorMessage,
-          variant: "destructive"
-        });
-      };
-      
-      recognition.onend = () => {
-        console.log("Speech recognition ended");
-        setIsListening(false);
-        setSpeechRecognition(null);
-        
-        if (isListening) {
-          toast({
-            title: "Recording Stopped",
-            description: "Voice input has stopped. You can continue typing or start recording again.",
-          });
-        }
-      };
-      
       recognition.start();
       
     } catch (error) {
@@ -359,18 +437,23 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   };
 
   const stopListening = () => {
-    if (speechRecognition) {
-      speechRecognition.stop();
-      setSpeechRecognition(null);
+    if (speechRecognition && speechRecognition.stopRecognition) {
+      speechRecognition.stopRecognition();
     }
     setIsListening(false);
+    setSpeechRecognition(null);
+    
+    toast({
+      title: "Voice Input Stopped",
+      description: "You can continue typing or start voice input again.",
+    });
   };
 
   // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (speechRecognition) {
-        speechRecognition.stop();
+      if (speechRecognition && speechRecognition.stopRecognition) {
+        speechRecognition.stopRecognition();
       }
     };
   }, [speechRecognition]);
@@ -463,25 +546,27 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
               />
               
               <div className="flex flex-wrap gap-3 justify-between">
-                <Button 
-                  variant={isListening ? "destructive" : "outline"}
-                  onClick={handleToggleMicrophone}
-                  type="button"
-                  className="flex items-center gap-2"
-                  disabled={conversationState !== 'asking'}
-                >
-                  {isListening ? (
-                    <>
-                      <span className="relative flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                      </span>
-                      Stop Recording
-                    </>
-                  ) : (
-                    'Use Voice Input'
-                  )}
-                </Button>
+                {speechSupportChecked && speechSupported && (
+                  <Button 
+                    variant={isListening ? "destructive" : "outline"}
+                    onClick={handleToggleMicrophone}
+                    type="button"
+                    className="flex items-center gap-2"
+                    disabled={conversationState !== 'asking'}
+                  >
+                    {isListening ? (
+                      <>
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                        </span>
+                        Stop Recording
+                      </>
+                    ) : (
+                      'Use Voice Input'
+                    )}
+                  </Button>
+                )}
                 
                 <Button 
                   onClick={handleSubmitResponse}
