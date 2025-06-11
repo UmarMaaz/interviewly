@@ -19,17 +19,17 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   const [questions, setQuestions] = useState<InterviewQuestion[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userResponse, setUserResponse] = useState('');
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [allResponses, setAllResponses] = useState<string[]>([]);
+  const [finalFeedback, setFinalFeedback] = useState<Feedback | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(true);
-  const [isFeedbackMode, setIsFeedbackMode] = useState(false);
+  const [isGeneratingFinalFeedback, setIsGeneratingFinalFeedback] = useState(false);
   const [interviewComplete, setInterviewComplete] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [currentSpeechText, setCurrentSpeechText] = useState<string>('');
-  const [isAcknowledging, setIsAcknowledging] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(true);
   const [conversationState, setConversationState] = useState<
-    'greeting' | 'asking' | 'acknowledging' | 'feedback' | 'transition' | 'complete'
+    'greeting' | 'asking' | 'acknowledging' | 'transition' | 'finalFeedback' | 'complete'
   >('greeting');
   
   // Generate initial questions
@@ -39,14 +39,13 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         setIsGeneratingQuestions(true);
         const initialQuestions = await generateQuestions(userProfile);
         setQuestions(initialQuestions);
+        setAllResponses(new Array(initialQuestions.length).fill(''));
         setIsGeneratingQuestions(false);
-        setConversationState('greeting');
         
-        // Set initial greeting text for the avatar to speak
-        if (initialQuestions.length > 0) {
-          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you some questions today and providing feedback on your answers.`;
-          setCurrentSpeechText(greeting);
-        }
+        // Start with greeting
+        const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you ${initialQuestions.length} questions today. Let's begin with our first question.`;
+        setCurrentSpeechText(greeting);
+        setConversationState('greeting');
       } catch (error) {
         console.error("Error generating questions:", error);
         toast({
@@ -61,84 +60,77 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     initInterview();
   }, [userProfile]);
 
-  // Manage conversation flow and speech based on state
+  // Handle speech completion and state transitions
   useEffect(() => {
-    if (isGeneratingQuestions) return;
+    if (!currentSpeechText) return;
     
-    // Set speech text based on conversation state
+    speak(currentSpeechText);
+    
+    // Set up listener for when speech completes
+    const checkSpeechComplete = setInterval(() => {
+      if (!isSpeaking()) {
+        clearInterval(checkSpeechComplete);
+        handleSpeechComplete();
+      }
+    }, 300);
+    
+    return () => clearInterval(checkSpeechComplete);
+  }, [currentSpeechText]);
+
+  const handleSpeechComplete = () => {
     switch (conversationState) {
       case 'greeting':
-        if (questions.length > 0) {
-          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you some questions today and providing feedback on your answers.`;
-          setCurrentSpeechText(greeting);
-          
-          // Move to asking state after the greeting is complete
-          const checkSpeechComplete = setInterval(() => {
-            if (!isSpeaking()) {
-              clearInterval(checkSpeechComplete);
-              setTimeout(() => {
-                setConversationState('asking');
-              }, 500);
-            }
-          }, 300);
-        }
+        // After greeting, move to asking the first question
+        setTimeout(() => {
+          setConversationState('asking');
+          if (questions.length > 0) {
+            setCurrentSpeechText(questions[0].question);
+          }
+        }, 500);
         break;
         
       case 'asking':
-        if (questions.length > 0 && currentQuestionIndex < questions.length) {
-          const currentQuestion = questions[currentQuestionIndex];
-          setCurrentSpeechText(currentQuestion.question);
-        }
+        // After asking question, wait for user response
+        setCurrentSpeechText('');
         break;
         
       case 'acknowledging':
-        // Just use the current acknowledgment text
-        break;
-        
-      case 'feedback':
-        if (isFeedbackMode && feedback) {
-          const feedbackIntro = feedback.positive ? 
-            "I appreciate your response. Here's some positive feedback: " : 
-            "Thank you for your answer. Here's some constructive feedback: ";
-            
-          const feedbackText = `${feedbackIntro} ${feedback.contentFeedback} ${feedback.deliveryFeedback} ${feedback.improvementTips || ''}`;
-          setCurrentSpeechText(feedbackText);
-        }
+        // After acknowledging, either ask next question or complete interview
+        setTimeout(() => {
+          if (currentQuestionIndex < questions.length - 1) {
+            setConversationState('transition');
+            const transition = getTransitionPhrase();
+            const nextQuestion = questions[currentQuestionIndex + 1].question;
+            setCurrentSpeechText(`${transition} ${nextQuestion}`);
+          } else {
+            // All questions complete, generate final feedback
+            generateFinalFeedback();
+          }
+        }, 500);
         break;
         
       case 'transition':
-        const transition = getTransitionPhrase();
-        if (currentQuestionIndex < questions.length - 1) {
-          const nextQuestion = questions[currentQuestionIndex + 1].question;
-          setCurrentSpeechText(`${transition} ${nextQuestion}`);
-        } else {
-          setCurrentSpeechText(`${transition} That was our final question.`);
-        }
+        // After transition, move to next question
+        setCurrentQuestionIndex(currentQuestionIndex + 1);
+        setConversationState('asking');
+        setCurrentSpeechText('');
+        break;
+        
+      case 'finalFeedback':
+        // After final feedback, complete interview
+        setConversationState('complete');
+        setCurrentSpeechText(`Thank you for completing the interview, ${userProfile.name}. This concludes our session. Good luck with your future interviews!`);
         break;
         
       case 'complete':
-        setCurrentSpeechText(`Congratulations ${userProfile.name}! You've completed your mock interview for the ${userProfile.role} position. I hope this practice session was helpful for your future interviews.`);
+        // Interview fully complete
+        setInterviewComplete(true);
+        setCurrentSpeechText('');
         break;
     }
-  }, [
-    conversationState, 
-    questions, 
-    currentQuestionIndex, 
-    isFeedbackMode, 
-    feedback, 
-    isAcknowledging, 
-    userProfile,
-    isGeneratingQuestions
-  ]);
+  };
 
-  // Effect to handle speech and ensure completed speaking before moving to next state
-  useEffect(() => {
-    if (currentSpeechText) {
-      speak(currentSpeechText);
-    }
-  }, [currentSpeechText]);
-
-  const handleSubmitResponse = async () => {
+  const handleSubmitResponse = () => {
     if (!userResponse.trim()) {
       toast({
         title: "Warning",
@@ -148,103 +140,83 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       return;
     }
     
-    // Stop listening if it's active
+    // Stop listening if active
     if (isListening) {
       stopListening();
     }
     
-    // First, acknowledge the response with a conversational phrase
-    setIsAcknowledging(true);
+    // Store the response
+    const newResponses = [...allResponses];
+    newResponses[currentQuestionIndex] = userResponse;
+    setAllResponses(newResponses);
+    
+    // Acknowledge the response
     setConversationState('acknowledging');
     const acknowledgment = getAcknowledgmentPhrase();
     setCurrentSpeechText(acknowledgment);
     
-    // Wait until the acknowledgment speech is complete before analyzing
-    const checkAcknowledgmentComplete = setInterval(() => {
-      if (!isSpeaking()) {
-        clearInterval(checkAcknowledgmentComplete);
-        proceedWithFeedback();
-      }
-    }, 300);
-    
-    const proceedWithFeedback = () => {
-      setIsAcknowledging(false);
-      setIsLoading(true);
-      
-      // Get AI feedback on the response
-      const currentQuestion = questions[currentQuestionIndex];
-      getAIFeedback(
-        currentQuestion.question, 
-        userResponse, 
-        userProfile
-      ).then(responseFeedback => {
-        setFeedback(responseFeedback);
-        setIsFeedbackMode(true);
-        setConversationState('feedback');
-        setIsLoading(false);
-      }).catch(error => {
-        console.error("Error getting feedback:", error);
-        toast({
-          title: "Error",
-          description: "Failed to analyze your response. Please try again.",
-          variant: "destructive"
-        });
-        setIsLoading(false);
-      });
-    };
-  };
-
-  const handleNextQuestion = () => {
-    // Wait for any current speech to finish first
-    if (isSpeaking()) {
-      stop();
-    }
-    
-    setIsFeedbackMode(false);
+    // Clear the current response
     setUserResponse('');
-    setFeedback(null);
+  };
+
+  const generateFinalFeedback = async () => {
+    setIsGeneratingFinalFeedback(true);
+    setConversationState('finalFeedback');
     
-    if (currentQuestionIndex < questions.length - 1) {
-      // Add a conversational transition between questions
-      setConversationState('transition');
+    try {
+      // Combine all questions and responses for comprehensive feedback
+      const interviewSummary = questions.map((q, index) => ({
+        question: q.question,
+        response: allResponses[index]
+      }));
       
-      // Wait until the transition speech is complete before showing the next question
-      const checkTransitionComplete = setInterval(() => {
-        if (!isSpeaking()) {
-          clearInterval(checkTransitionComplete);
-          setCurrentQuestionIndex(currentQuestionIndex + 1);
-          setConversationState('asking');
-        }
-      }, 300);
-    } else {
-      setInterviewComplete(true);
+      // Get comprehensive feedback for the entire interview
+      const feedback = await getAIFeedback(
+        `Complete interview assessment for ${questions.length} questions`,
+        interviewSummary.map(item => `Q: ${item.question}\nA: ${item.response}`).join('\n\n'),
+        userProfile
+      );
+      
+      setFinalFeedback(feedback);
+      
+      // Speak the feedback
+      const feedbackText = `Here's your overall interview feedback: ${feedback.contentFeedback} ${feedback.deliveryFeedback} ${feedback.improvementTips || ''}`;
+      setCurrentSpeechText(feedbackText);
+      
+    } catch (error) {
+      console.error("Error generating final feedback:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate feedback. Please try again.",
+        variant: "destructive"
+      });
       setConversationState('complete');
+    } finally {
+      setIsGeneratingFinalFeedback(false);
     }
   };
 
-  // Add the missing handleRestartInterview function
   const handleRestartInterview = () => {
     // Reset all states to initial values
     setUserResponse('');
-    setFeedback(null);
+    setAllResponses([]);
+    setFinalFeedback(null);
     setCurrentQuestionIndex(0);
-    setIsFeedbackMode(false);
     setInterviewComplete(false);
     setIsListening(false);
-    setIsAcknowledging(false);
+    setIsGeneratingFinalFeedback(false);
     setConversationState('greeting');
     
-    // Re-generate questions (reusing the same initInterview logic)
+    // Re-generate questions
     setIsGeneratingQuestions(true);
     generateQuestions(userProfile)
       .then(initialQuestions => {
         setQuestions(initialQuestions);
+        setAllResponses(new Array(initialQuestions.length).fill(''));
         setIsGeneratingQuestions(false);
-        // Set initial greeting
-        if (initialQuestions.length > 0) {
-          const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you some questions today and providing feedback on your answers.`;
-          setCurrentSpeechText(greeting);
-        }
+        
+        const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you ${initialQuestions.length} questions today. Let's begin with our first question.`;
+        setCurrentSpeechText(greeting);
       })
       .catch(error => {
         console.error("Error generating questions:", error);
@@ -279,7 +251,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       const recognition = new SpeechRecognition();
       
       recognition.continuous = true;
-      recognition.interimResults = false; // Changed to false to prevent repeating words
+      recognition.interimResults = false;
       recognition.lang = 'en-US';
       
       recognition.onstart = () => {
@@ -290,19 +262,16 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         });
       };
       
-      // Store previous transcripts to avoid repetition
       const previousTranscripts = new Set();
       
       recognition.onresult = (event: any) => {
         const lastResultIndex = event.results.length - 1;
         const transcript = event.results[lastResultIndex][0].transcript;
         
-        // Prevent repetition by checking if we've seen this transcript
         if (!previousTranscripts.has(transcript)) {
           previousTranscripts.add(transcript);
           
           setUserResponse(prev => {
-            // Add space only if there's existing content
             return prev ? `${prev} ${transcript}` : transcript;
           });
         }
@@ -318,10 +287,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         setIsListening(false);
       };
       
-      // Don't automatically end recognition
       recognition.onend = () => {
-        // Instead of stopping listening, restart if still in listening mode
-        // This prevents premature closing of voice input
         if (isListening) {
           try {
             recognition.start();
@@ -332,9 +298,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         }
       };
       
-      // Store recognition instance in window to be able to stop it later
       (window as any).recognitionInstance = recognition;
-      
       recognition.start();
     } catch (error) {
       console.error("Error starting speech recognition:", error);
@@ -370,7 +334,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         <Card className="w-full aspect-square relative flex items-center justify-center shadow-lg">
           <Avatar 
             isSpeaking={isSpeakingNow} 
-            mood={isFeedbackMode ? (feedback?.positive ? 'positive' : 'neutral') : 'neutral'}
+            mood={conversationState === 'finalFeedback' ? (finalFeedback?.positive ? 'positive' : 'neutral') : 'neutral'}
             text={currentSpeechText}
           />
         </Card>
@@ -408,12 +372,25 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
               Start a New Interview
             </Button>
           </Card>
-        ) : isFeedbackMode ? (
-          <FeedbackPanel 
-            feedback={feedback!} 
-            onNext={handleNextQuestion} 
-            isLastQuestion={currentQuestionIndex === questions.length - 1}
-          />
+        ) : conversationState === 'finalFeedback' ? (
+          isGeneratingFinalFeedback ? (
+            <Card className="p-6 flex items-center justify-center h-64">
+              <div className="text-center">
+                <div className="animate-pulse-subtle text-interview-primary">
+                  <p className="text-xl font-medium mb-2">Analyzing your interview performance...</p>
+                  <p className="text-sm text-gray-600">
+                    Generating comprehensive feedback on all your responses.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          ) : finalFeedback ? (
+            <FeedbackPanel 
+              feedback={finalFeedback} 
+              onNext={() => setInterviewComplete(true)}
+              isLastQuestion={true}
+            />
+          ) : null
         ) : (
           <>
             <QuestionPanel 
@@ -428,6 +405,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
                 className="min-h-[150px] mb-4"
                 value={userResponse}
                 onChange={(e) => setUserResponse(e.target.value)}
+                disabled={conversationState !== 'asking' && conversationState !== 'transition'}
               />
               
               <div className="flex flex-wrap gap-3 justify-between">
@@ -436,6 +414,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
                   onClick={handleToggleMicrophone}
                   type="button"
                   className="flex items-center gap-2"
+                  disabled={conversationState !== 'asking' && conversationState !== 'transition'}
                 >
                   {isListening ? (
                     <>
@@ -452,10 +431,10 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
                 
                 <Button 
                   onClick={handleSubmitResponse}
-                  disabled={isLoading || !userResponse.trim()}
+                  disabled={isLoading || !userResponse.trim() || (conversationState !== 'asking' && conversationState !== 'transition')}
                   className="bg-interview-primary hover:bg-interview-secondary"
                 >
-                  {isLoading ? "Analyzing..." : "Submit Answer"}
+                  {isLoading ? "Processing..." : "Submit Answer"}
                 </Button>
               </div>
             </Card>
