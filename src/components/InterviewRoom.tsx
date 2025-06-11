@@ -31,6 +31,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   const [conversationState, setConversationState] = useState<
     'greeting' | 'asking' | 'acknowledging' | 'transition' | 'finalFeedback' | 'complete'
   >('greeting');
+  const [speechRecognition, setSpeechRecognition] = useState<any>(null);
   
   // Generate initial questions
   useEffect(() => {
@@ -43,7 +44,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         setIsGeneratingQuestions(false);
         
         // Start with greeting
-        const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you ${initialQuestions.length} questions today. Let's begin with our first question.`;
+        const greeting = `Hello ${userProfile.name}, welcome to your AI interview session for the ${userProfile.role} position. I'll be asking you ${initialQuestions.length} questions today. Let's begin.`;
         setCurrentSpeechText(greeting);
         setConversationState('greeting');
       } catch (error) {
@@ -86,7 +87,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
           if (questions.length > 0) {
             setCurrentSpeechText(questions[0].question);
           }
-        }, 500);
+        }, 1000);
         break;
         
       case 'asking':
@@ -106,7 +107,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
             // All questions complete, generate final feedback
             generateFinalFeedback();
           }
-        }, 500);
+        }, 1000);
         break;
         
       case 'transition':
@@ -207,6 +208,12 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
     setIsGeneratingFinalFeedback(false);
     setConversationState('greeting');
     
+    // Clean up speech recognition
+    if (speechRecognition) {
+      speechRecognition.stop();
+      setSpeechRecognition(null);
+    }
+    
     // Re-generate questions
     setIsGeneratingQuestions(true);
     generateQuestions(userProfile)
@@ -215,7 +222,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
         setAllResponses(new Array(initialQuestions.length).fill(''));
         setIsGeneratingQuestions(false);
         
-        const greeting = `Hello ${userProfile.name}, I'm your AI interview coach for the ${userProfile.role} position. I'll be asking you ${initialQuestions.length} questions today. Let's begin with our first question.`;
+        const greeting = `Hello ${userProfile.name}, welcome to your AI interview session for the ${userProfile.role} position. I'll be asking you ${initialQuestions.length} questions today. Let's begin.`;
         setCurrentSpeechText(greeting);
       })
       .catch(error => {
@@ -229,97 +236,144 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
       });
   };
 
-  const handleToggleMicrophone = () => {
+  const handleToggleMicrophone = async () => {
     if (isListening) {
       stopListening();
       return;
     }
 
     // Check for browser compatibility
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
       toast({
-        title: "Error",
-        description: "Speech recognition is not supported in your browser.",
+        title: "Not Supported",
+        description: "Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Request microphone permission first
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (error) {
+      console.error("Microphone permission denied:", error);
+      toast({
+        title: "Permission Required",
+        description: "Please allow microphone access to use voice input.",
         variant: "destructive"
       });
       return;
     }
 
     try {
-      // @ts-ignore - TypeScript doesn't know about webkitSpeechRecognition
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
+      setSpeechRecognition(recognition);
       
-      recognition.continuous = true;
+      recognition.continuous = false;
       recognition.interimResults = false;
       recognition.lang = 'en-US';
+      recognition.maxAlternatives = 1;
       
       recognition.onstart = () => {
+        console.log("Speech recognition started");
         setIsListening(true);
         toast({
           title: "Listening",
-          description: "Speak your answer now...",
+          description: "Speak your answer now. Click the button again to stop.",
         });
       };
       
-      const previousTranscripts = new Set();
-      
       recognition.onresult = (event: any) => {
-        const lastResultIndex = event.results.length - 1;
-        const transcript = event.results[lastResultIndex][0].transcript;
-        
-        if (!previousTranscripts.has(transcript)) {
-          previousTranscripts.add(transcript);
+        console.log("Speech recognition result:", event);
+        if (event.results.length > 0) {
+          const transcript = event.results[0][0].transcript;
+          console.log("Transcript:", transcript);
           
           setUserResponse(prev => {
-            return prev ? `${prev} ${transcript}` : transcript;
+            const newResponse = prev ? `${prev} ${transcript}` : transcript;
+            return newResponse;
           });
         }
       };
       
       recognition.onerror = (event: any) => {
-        console.error('Speech recognition error', event.error);
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        setSpeechRecognition(null);
+        
+        let errorMessage = "Speech recognition error occurred.";
+        switch (event.error) {
+          case 'network':
+            errorMessage = "Network error. Please check your internet connection and try again.";
+            break;
+          case 'not-allowed':
+            errorMessage = "Microphone access denied. Please allow microphone permissions.";
+            break;
+          case 'no-speech':
+            errorMessage = "No speech detected. Please try speaking again.";
+            break;
+          case 'audio-capture':
+            errorMessage = "No microphone found. Please check your audio devices.";
+            break;
+          case 'service-not-allowed':
+            errorMessage = "Speech service not allowed. Please try using HTTPS.";
+            break;
+          default:
+            errorMessage = `Speech recognition error: ${event.error}`;
+        }
+        
         toast({
-          title: "Error",
-          description: `Speech recognition error: ${event.error}`,
+          title: "Voice Input Error",
+          description: errorMessage,
           variant: "destructive"
         });
-        setIsListening(false);
       };
       
       recognition.onend = () => {
+        console.log("Speech recognition ended");
+        setIsListening(false);
+        setSpeechRecognition(null);
+        
         if (isListening) {
-          try {
-            recognition.start();
-          } catch (error) {
-            console.error("Error restarting speech recognition:", error);
-            setIsListening(false);
-          }
+          toast({
+            title: "Recording Stopped",
+            description: "Voice input has stopped. You can continue typing or start recording again.",
+          });
         }
       };
       
-      (window as any).recognitionInstance = recognition;
       recognition.start();
+      
     } catch (error) {
       console.error("Error starting speech recognition:", error);
+      setIsListening(false);
+      setSpeechRecognition(null);
       toast({
         title: "Error",
-        description: "Could not start voice input. Please try again.",
+        description: "Could not start voice input. Please try again or use text input instead.",
         variant: "destructive"
       });
     }
   };
 
   const stopListening = () => {
-    if ((window as any).recognitionInstance) {
-      (window as any).recognitionInstance.stop();
-      toast({
-        title: "Voice input stopped",
-        description: "You can continue typing your answer.",
-      });
-      setIsListening(false);
+    if (speechRecognition) {
+      speechRecognition.stop();
+      setSpeechRecognition(null);
     }
+    setIsListening(false);
   };
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (speechRecognition) {
+        speechRecognition.stop();
+      }
+    };
+  }, [speechRecognition]);
 
   const currentQuestion = questions[currentQuestionIndex];
   const isSpeakingNow = isSpeaking();
@@ -405,7 +459,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
                 className="min-h-[150px] mb-4"
                 value={userResponse}
                 onChange={(e) => setUserResponse(e.target.value)}
-                disabled={conversationState !== 'asking' && conversationState !== 'transition'}
+                disabled={conversationState !== 'asking'}
               />
               
               <div className="flex flex-wrap gap-3 justify-between">
@@ -414,7 +468,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
                   onClick={handleToggleMicrophone}
                   type="button"
                   className="flex items-center gap-2"
-                  disabled={conversationState !== 'asking' && conversationState !== 'transition'}
+                  disabled={conversationState !== 'asking'}
                 >
                   {isListening ? (
                     <>
@@ -431,7 +485,7 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
                 
                 <Button 
                   onClick={handleSubmitResponse}
-                  disabled={isLoading || !userResponse.trim() || (conversationState !== 'asking' && conversationState !== 'transition')}
+                  disabled={isLoading || !userResponse.trim() || conversationState !== 'asking'}
                   className="bg-interview-primary hover:bg-interview-secondary"
                 >
                   {isLoading ? "Processing..." : "Submit Answer"}
