@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 // API Key - In a production app, this should be stored securely in environment variables 
 // or retrieved from server-side for security
-const GEMINI_API_KEY = "AIzaSyDwdj4RKjQMoQSqAxF2IGudWb0pOzF7GH8";
+const GEMINI_API_KEY = "AIzaSyCZ1YyKplnPKffH9h0Tre6N6YcHbYcMthA";
 const GEMINI_MODEL = "models/gemini-2.5-flash-lite";
 
 export interface UserProfile {
