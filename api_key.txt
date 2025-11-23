@@ -1,18 +1,1 @@
-[plugin:vite:react-swc] × Expression expected
-     ╭─[C:/Users/ffox2/Desktop/interviewly-main/src/utils/interviewService.ts:466:1]
- 463 │   if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
- 464 │     toast.info("Voice input feature coming soon!");
- 465 │     return false;
- 466 │   } else {.
-     ·           ─
- 467 │     toast.error("Your browser doesn't support speech recognition.");
- 468 │     return false;
- 469 │   }
-     ╰────
-
-
-Caused by:
-    Syntax Error
-C:/Users/ffox2/Desktop/interviewly-main/src/utils/interviewService.ts:466:1
-Click outside, press Esc key, or fix the code to dismiss.
-You can also disable this overlay by setting server.hmr.overlay to false in vite.config.ts.
+sk_382ca005822432eb0ae9347fa04ea79c341bc24f4d21c418
