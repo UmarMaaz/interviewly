@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import UserProfileForm from '@/components/UserProfileForm';
 import InterviewRoom from '@/components/InterviewRoom';
 import { UserProfile } from '@/utils/interviewService';
+import ApiKeyModal from '@/components/ApiKeyModal';
 
 const Index: React.FC = () => {
   const [interviewStarted, setInterviewStarted] = useState(false);
@@ -16,11 +17,12 @@ const Index: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-interview-light to-white">
+      <ApiKeyModal />
       <main className="container mx-auto py-8 px-4">
         {!interviewStarted ? (
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-8 animate-fade-in">
-              <h1 className="text-4xl font-bold text-interview-primary mb-4">AI Interview Coach</h1>
+              <h1 className="text-4xl font-bold text-interview-primary mb-4">Interviewly</h1>
               <p className="text-xl text-interview-secondary">
                 Practice your interview skills with our AI-powered coach. Get personalized questions and feedback.
               </p>

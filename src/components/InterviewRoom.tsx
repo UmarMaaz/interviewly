@@ -7,7 +7,6 @@ import { toast } from '@/hooks/use-toast';
 import Avatar from '@/components/Avatar';
 import QuestionPanel from '@/components/QuestionPanel';
 import FeedbackPanel from '@/components/FeedbackPanel';
-import ApiKeyModal from '@/components/ApiKeyModal';
 import { UserProfile, generateQuestions, getAIFeedback, InterviewQuestion, Feedback } from '@/utils/interviewService';
 import { getAcknowledgmentPhrase, getTransitionPhrase, speak, isSpeaking, stop } from '@/utils/textToSpeech';
 
@@ -28,7 +27,6 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
   const [interviewComplete, setInterviewComplete] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [currentSpeechText, setCurrentSpeechText] = useState<string>('');
-  const [showApiKeyModal, setShowApiKeyModal] = useState(true);
   const [conversationState, setConversationState] = useState<
     'greeting' | 'asking' | 'feedback' | 'transition' | 'finalFeedback' | 'complete'
   >('greeting');
@@ -466,9 +464,6 @@ const InterviewRoom: React.FC<InterviewRoomProps> = ({ userProfile }) => {
 
   return (
     <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-8">
-      {/* API Key Modal */}
-      <ApiKeyModal onComplete={() => setShowApiKeyModal(false)} />
-
       {/* Avatar Section */}
       <div className="lg:col-span-2 flex flex-col justify-center items-center">
         <Card className="w-full aspect-square relative flex items-center justify-center shadow-lg">
