@@ -1,0 +1,113 @@
+# Android AI Interview Coach Application Prompt
+
+**Project Goal:**
+Develop an Android mobile application mirroring the functionality and user experience of the existing "Interviewly" web application. The app will serve as an AI Interview Coach, built with Jetpack Compose and Kotlin.
+
+**Technology Stack:**
+*   **UI Framework:** Jetpack Compose
+*   **Programming Language:** Kotlin
+*   **AI Service:** Google Gemini API
+*   **Text-to-Speech (TTS) Service:** Eleven Labs API
+*   **Speech-to-Text (STT) Service:** Android Native SpeechRecognizer
+
+---
+
+**Application Flow & Core Features:**
+
+1.  **Splash/Welcome Screen:**
+    *   A simple introductory screen upon app launch.
+
+2.  **API Key Management (Explicitly Hardcoded - as per user request):**
+    *   **Crucial Instruction:** The following API keys **MUST be hardcoded directly into the application's source code**. Do NOT implement user input for API keys or store them in environment variables for this project.
+        *   **Eleven Labs API Key:** `sk_382ca005822432eb0ae9347fa04ea79c341bc24f4d21c418`
+        *   **Google Gemini API Key:** `AIzaSyCZ1YyKplnPKffH9h0Tre6N6YcHbYcMthA`
+
+3.  **User Profile Input Screen:**
+    *   **Inputs:**
+        *   `Name` (Text field)
+        *   `Field` (Dropdown/Spinner with options: 'Software Engineering', 'Marketing', 'Finance', 'Sales', 'Human Resources', 'Design', 'Product Management', 'Data Science', 'Customer Service', 'Operations', 'Medical')
+        *   `Medical Sub-field` (Text field, **only visible if 'Medical' is selected for 'Field'**. Example placeholder: "e.g. Radiology, Cardiology")
+        *   `Role You're Applying For` (Text field, Example placeholder: "e.g. Android Developer, Marketing Manager")
+        *   `Experience Level` (Dropdown/Spinner with options: 'Beginner (0-1 years)', 'Intermediate (2-5 years)', 'Advanced (5+ years)', 'Senior/Leadership')
+    *   **Validation:** All fields should be required.
+    *   **Action:** "Start Interview" button. On submission, collect `UserProfile` data. The `field` for Medical professions should be formatted as "Medical - [Medical Sub-field]".
+
+4.  **AI Interview Room Screen:**
+    *   **Layout:** Split layout (e.g., two columns or top/bottom sections on smaller screens).
+        *   **Left/Top Section (AI Avatar):**
+            *   Display an AI avatar (simple graphic representation, e.g., a circle or square, that changes state).
+            *   Avatar state should visually indicate when the AI is "speaking".
+            *   Display the current AI speech text (e.g., "AI is speaking: Hello John Doe...").
+        *   **Right/Bottom Section (Q&A Interface):**
+            *   **Question Panel:** Display the current interview question, its number (e.g., "Question 1 of 10"), and topic.
+            *   **User Response Input:**
+                *   `Textarea` for typing answers.
+                *   **Voice Input Toggle Button:**
+                    *   Uses Android's native SpeechRecognizer for Speech-to-Text.
+                    *   Button state (e.g., "Use Voice Input" / "Stop Recording") and visual indicator when listening.
+                    *   Transcribe user speech into the text input area in real-time.
+            *   **Submit Answer Button:** Sends the user's response to the AI for feedback.
+            *   **Feedback Display Area:**
+                *   After submitting an answer, display AI feedback (content, delivery, improvement tips, and a follow-up question if provided).
+            *   **Next Question Button:** Moves to the next question or triggers final feedback generation if all questions are answered.
+    *   **Interview State Management:**
+        *   `Loading` state for question generation and feedback generation.
+        *   `Speaking` state for AI avatar.
+        *   `Listening` state for voice input.
+    *   **Dynamic Questions:** Questions generated dynamically based on `UserProfile` (via Gemini API).
+    *   **Greeting:** AI should greet the user and state the number of questions.
+
+5.  **Final Feedback Screen:**
+    *   Displayed after all questions are answered and final feedback is generated.
+    *   Shows comprehensive feedback on the entire interview performance.
+    *   "Start a New Interview" button to return to the User Profile Input Screen.
+
+---
+
+**API Integration Details:**
+
+*   **Google Gemini API:**
+    *   **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=[YOUR_GEMINI_API_KEY]`
+    *   **Requests:**
+        *   **Generate Questions:** Send a detailed prompt including `UserProfile` data (name, field, role, experience level) asking for 8-10 interview questions. **Expected JSON Output:** An array of objects with `id`, `question`, `category`, `topic`. Example: `[{"id": 1, "question": "...", "category": "...", "topic": "..."}]`
+        *   **Get Feedback:** Send user's answer, the question asked, and `UserProfile` data. **Expected JSON Output:** An object with `positive` (boolean), `contentFeedback`, `deliveryFeedback`, `improvementTips` (optional), `followUpQuestion` (optional). Example: `{"positive": true, "contentFeedback": "...", "deliveryFeedback": "...", "improvementTips": "...", "followUpQuestion": "..."}`
+    *   **Error Handling:** Implement robust error handling. If Gemini API fails (e.g., network error, invalid key), fall back to predefined questions/feedback.
+
+*   **Eleven Labs API:**
+    *   **Endpoint:** `https://api.elevenlabs.io/v1/text-to-speech/{voice_id}`
+    *   **Request:** Send text to be converted to speech.
+    *   **Headers:** `Accept: audio/mpeg`, `Content-Type: application/json`, `xi-api-key: [YOUR_ELEVENLABS_API_KEY]`
+    *   **Body:** `{"text": "...", "model_id": "eleven_multilingual_v2", "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "style": 0.0, "use_speaker_boost": true}}`
+    *   **Response:** Audio stream (MP3). Play this audio.
+    *   **Voice ID:** Use a default voice ID (e.g., "EXAVITQu4vr4xnSDxMaL" - Sarah voice, but allow this to be configurable if simple).
+    *   **Error Handling:** If Eleven Labs API fails, use Android's native TextToSpeech as a fallback.
+
+---
+
+**Styling and UI Considerations:**
+
+*   Utilize Jetpack Compose's Material Design principles for a clean, modern, and intuitive user interface.
+*   Aim for a similar aesthetic (colors, typography, spacing) to the provided web app if possible.
+*   Ensure responsiveness across various Android device screen sizes and orientations.
+*   Incorporate subtle animations for UI transitions (e.g., question changes, feedback appearance).
+*   Use `Toast` or snackbars for non-critical messages (e.g., warnings, success messages).
+
+---
+
+**Error Handling and Robustness:**
+
+*   Implement proper network error handling (timeout, no internet connection).
+*   Handle API key failures gracefully (as specified in API Integration Details).
+*   Provide user-friendly messages for errors.
+*   Implement retry mechanisms for API calls if appropriate.
+
+---
+
+**General Instructions:**
+
+*   Structure the project with a clear architecture (e.g., MVVM).
+*   Use Kotlin Coroutines for asynchronous operations.
+*   Provide a `README.md` with instructions on how to set up, build, and run the application.
+*   Include relevant dependencies in `build.gradle` files.
+*   Ensure a smooth and responsive user experience.
+*   Remember to hardcode the API keys as requested.
